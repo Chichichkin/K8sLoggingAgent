@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-logging-agent
+  namespace: kube-system
+  labels:
+    app: node-logging-agent
+spec:
+  selector:
+    matchLabels:
+      app: node-logging-agent
+  template:
+    metadata:
+      labels:
+        app: node-logging-agent
+    spec:
+      serviceAccountName: node-logging-agent
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 0
+        runAsGroup: 0
+      containers:
+        - name: agent
+          image: localhost:5000/node-logging-agent:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - DAC_OVERRIDE
+          env:
+            - name: LOKI_URL
+              value: "http://localhost:3100"
+            - name: BATCH_SIZE
+              value: "1000"
+            - name: BATCH_TIMEOUT
+              value: "2s"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CLUSTER_NAME
+              value: "my-cluster"
+            - name: MIN_WORKERS
+              value: "2"
+            - name: MAX_WORKERS
+              value: "10"
+            - name: QUEUE_SIZE
+              value: "100"
+            - name: SCAN_INTERVAL
+              value: "10s"
+            - name: SCALE_UP_THRESHOLD
+              value: "0.8"
+            - name: SCALE_DOWN_THRESHOLD
+              value: "0.2"
+            - name: SCALE_CHECK_INTERVAL
+              value: "10s"
+            - name: FILE_IDLE_TIMEOUT
+              value: "5m"
+            - name: FILE_BUFFER_SIZE
+              value: "1000"
+            - name: MAX_RETRIES
+              value: "3"
+            - name: LOG_PATH
+              value: "/var/log/pods"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+      volumes:
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+            type: Directory
+        - name: varlog
+          hostPath:
+            path: /var/log
+            type: Directory
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/os: linux
